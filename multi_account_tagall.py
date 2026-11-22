@@ -44,9 +44,37 @@ ne diya hoga) aur commands bhejo - sirf aapki OWNER_ID se chalenge.
 
 import os
 import asyncio
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError
+
+
+def start_dummy_webserver():
+    """
+    Render (free Web Service plan) ko ek open port chahiye hota hai,
+    warna wo deploy ko "unhealthy" maan kar baar-baar restart karta hai.
+    Hamara bot koi website nahi hai, isliye ye sirf ek chhota, fake
+    HTTP server chala deta hai jo "OK" bol deta hai - sirf Render ke
+    port-check ko santusht karne ke liye, bot ke kaam se iska koi
+    lena-dena nahi.
+    """
+
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Bot is running.")
+
+        def log_message(self, format, *args):
+            pass  # Render ke logs me faltu HTTP request logs na bhare
+
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"Dummy webserver port {port} par chalu hai (sirf Render health-check ke liye).")
 
 MAX_ACCOUNTS = 5  # zarurat ho to badha sakte ho
 
@@ -225,6 +253,8 @@ async def main():
         print("CONTROL_BOT_TOKEN / CONTROL_BOT_API_ID / CONTROL_BOT_API_HASH set nahi hain!")
         print("BotFather ko /newbot bhej kar token lo, aur my.telegram.org wala API ID/Hash daalo.")
         return
+
+    start_dummy_webserver()
 
     configs = load_account_configs()
     if not configs:
